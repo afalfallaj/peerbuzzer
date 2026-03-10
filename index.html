@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Buzzer Timing Tool</title>
+    <link rel="stylesheet" href="app.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+</head>
+
+<body>
+    <div id="app" class="screen-entry">
+        <!-- Entry Screen -->
+        <div id="entry-screen" class="view active">
+            <h1 class="logo">Buzzer<span>Timing</span></h1>
+
+            <div class="glass-card flex-row">
+                <!-- Host Section -->
+                <div class="section">
+                    <h2>Create Session (Host)</h2>
+                    <p class="instruction">Quick Tip: Find your Local IP (e.g., 192.168.1.15) to use as the Room ID for
+                        players to join.</p>
+                    <input type="text" id="host-ip-input" placeholder="Your Local IP" />
+                    <button id="btn-create" class="btn primary">Create Session</button>
+                </div>
+
+                <div class="divider"></div>
+
+                <!-- Player Section -->
+                <div class="section">
+                    <h2>Join Session (Player)</h2>
+                    <input type="text" id="player-name-input" placeholder="Your Name" />
+                    <input type="text" id="join-ip-input" placeholder="Host's Local IP" />
+                    <button id="btn-join" class="btn secondary">Join Session</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Host Dashboard Screen -->
+        <div id="host-screen" class="view">
+            <header>
+                <div class="header-info">
+                    <h2>Host Panel</h2>
+                    <span class="badge" id="host-room-badge">IP: --</span>
+                </div>
+                <div class="controls" style="position: relative;">
+                    <div class="settings-dropdown" id="host-settings-panel">
+                        <div class="sound-control">
+                            <label for="sound-select" class="label-text">Sound:</label>
+                            <select id="sound-select" class="styled-select">
+                                <option value="classic">Classic Buzzer</option>
+                                <option value="arcade">Arcade Beep</option>
+                                <option value="alert">Alert Tone</option>
+                                <option value="off">Off</option>
+                            </select>
+                        </div>
+                        <button id="btn-host-leave" class="btn danger outline w-full">End Session</button>
+                    </div>
+                    <button id="btn-settings" class="btn outline icon-btn" aria-label="Settings" title="Settings">
+                        <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2"
+                            fill="none" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="3"></circle>
+                            <path
+                                d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z">
+                            </path>
+                        </svg>
+                    </button>
+                </div>
+            </header>
+
+            <div class="host-main-action">
+                <button id="btn-reset" class="btn warning btn-massive">Reset Buzzers</button>
+            </div>
+
+            <div class="dashboard-grid">
+                <!-- Current Round -->
+                <div class="glass-card panel">
+                    <h3>Dashboard</h3>
+                    <ul id="host-current-results" class="results-list"></ul>
+                </div>
+
+                <!-- Lobby -->
+                <div class="glass-card panel">
+                    <h3>Lobby</h3>
+                    <ul id="host-lobby-list" class="lobby-list"></ul>
+                </div>
+
+                <!-- Game History -->
+                <div class="glass-card panel wide">
+                    <h3>Game History</h3>
+                    <div id="host-history-log" class="history-log"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Player Screen -->
+        <div id="player-screen" class="view">
+            <header>
+                <div class="header-info">
+                    <h2 id="player-display-name">Player</h2>
+                    <div>
+                        <span class="badge" id="player-room-badge">Host IP: --</span>
+                        <span class="badge" id="player-conn-status"
+                            style="margin-left: 0.5rem; background: rgba(35, 134, 54, 0.2); color: var(--secondary);">Connected</span>
+                    </div>
+                </div>
+            </header>
+
+            <div class="player-main">
+                <div class="buzzer-container">
+                    <button id="btn-buzzer" class="buzzer">BUZZ</button>
+                </div>
+
+                <div class="glass-card panel current-results-panel">
+                    <h3>Round Results</h3>
+                    <ul id="player-current-results" class="results-list"></ul>
+                </div>
+
+                <!-- Player Lobby -->
+                <div class="glass-card panel current-results-panel">
+                    <h3>Lobby</h3>
+                    <ul id="player-lobby-list" class="lobby-list"></ul>
+                </div>
+
+                <div class="player-footer" style="width: 100%; text-align: center; margin-top: 1rem;">
+                    <button id="btn-player-leave" class="btn danger outline w-full">Leave Session</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notifications -->
+    <div id="toast-container"></div>
+
+    <script src="app.js"></script>
+</body>
+
+</html>
