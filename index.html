@@ -47,14 +47,42 @@
                 </div>
                 <div class="controls" style="position: relative;">
                     <div class="settings-dropdown" id="host-settings-panel">
-                        <div class="sound-control">
+                        <div class="setting-control">
                             <label for="sound-select" class="label-text">Sound:</label>
-                            <select id="sound-select" class="styled-select">
+                            <select id="sound-select" class="styled-select" style="flex: 1;">
                                 <option value="classic">Classic Buzzer</option>
                                 <option value="arcade">Arcade Beep</option>
                                 <option value="alert">Alert Tone</option>
                                 <option value="off">Off</option>
                             </select>
+                        </div>
+                        <div class="setting-control setting-toggle-group">
+                            <div class="toggle-header">
+                                <label for="post-buzz-toggle" class="label-text">Post Buzz Counter</label>
+                                <label class="switch">
+                                    <input type="checkbox" id="post-buzz-toggle" checked>
+                                    <span class="slider round"></span>
+                                </label>
+                            </div>
+                            <div class="time-input-container" id="post-buzz-input-container">
+                                <label for="post-buzz-timer" class="label-small">Duration (sec):</label>
+                                <input type="number" id="post-buzz-timer" class="styled-select" value="5" min="0"
+                                    max="99" style="width: 70px;">
+                            </div>
+                        </div>
+                        <div class="setting-control setting-toggle-group">
+                            <div class="toggle-header">
+                                <label for="start-countdown-toggle" class="label-text">Host Countdown</label>
+                                <label class="switch">
+                                    <input type="checkbox" id="start-countdown-toggle" checked>
+                                    <span class="slider round"></span>
+                                </label>
+                            </div>
+                            <div class="time-input-container" id="start-countdown-input-container">
+                                <label for="start-countdown-timer" class="label-small">Duration (sec):</label>
+                                <input type="number" id="start-countdown-timer" class="styled-select" value="10" min="1"
+                                    max="99" style="width: 70px;">
+                            </div>
                         </div>
                         <button id="btn-host-leave" class="btn danger outline w-full">End Session</button>
                     </div>
@@ -70,8 +98,9 @@
                 </div>
             </header>
 
-            <div class="host-main-action">
-                <button id="btn-reset" class="btn warning btn-massive">Reset Buzzers</button>
+            <div class="host-main-action" style="gap: 1rem;">
+                <button id="btn-start-countdown" class="btn secondary btn-massive">Start Timer</button>
+                <button id="btn-reset" class="btn warning btn-massive">Reset</button>
             </div>
 
             <div class="dashboard-grid">
@@ -133,6 +162,14 @@
 
     <!-- Toast Notifications -->
     <div id="toast-container"></div>
+
+    <!-- Global Timer Display -->
+    <div id="global-timer-display" class="glass-card timer-card hidden">
+        <div class="timer-circle">
+            <span id="timer-text">--</span>
+        </div>
+        <p id="timer-label">Countdown</p>
+    </div>
 
     <script src="app.js"></script>
 </body>

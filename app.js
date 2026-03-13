@@ -15,6 +15,13 @@ const btnJoin = document.getElementById('btn-join');
 // Host
 const hostRoomBadge = document.getElementById('host-room-badge');
 const btnReset = document.getElementById('btn-reset');
+const btnStartCountdown = document.getElementById('btn-start-countdown');
+const postBuzzTimerInput = document.getElementById('post-buzz-timer');
+const startCountdownTimerInput = document.getElementById('start-countdown-timer');
+const postBuzzToggle = document.getElementById('post-buzz-toggle');
+const startCountdownToggle = document.getElementById('start-countdown-toggle');
+const postBuzzInputContainer = document.getElementById('post-buzz-input-container');
+const startCountdownInputContainer = document.getElementById('start-countdown-input-container');
 const btnHostSettings = document.getElementById('btn-settings');
 const hostSettingsPanel = document.getElementById('host-settings-panel');
 const btnHostLeave = document.getElementById('btn-host-leave');
@@ -32,6 +39,11 @@ const playerCurrentResults = document.getElementById('player-current-results');
 const playerLobbyList = document.getElementById('player-lobby-list');
 const playerConnStatus = document.getElementById('player-conn-status');
 
+// Global Timer
+const globalTimerDisplay = document.getElementById('global-timer-display');
+const timerText = document.getElementById('timer-text');
+const timerLabel = document.getElementById('timer-label');
+
 /* --- State --- */
 let peer = null;
 let hostConn = null; // Player's connection to host
@@ -39,6 +51,8 @@ let playerConns = {}; // Host's connections to players
 let lobbyState = {}; // { connId: { name, status } }
 let currentRound = []; // { name, timeOffset }
 let firstBuzzTime = null;
+let isBuzzerLocked = false;
+let activeTimerInterval = null;
 
 // Audio Context setup
 const AudioContext = window.AudioContext || window.webkitAudioContext;
@@ -126,6 +140,41 @@ function playBuzzSound() {
     }
 }
 
+/* --- Utility Functions & Timers --- */
+function startGlobalTimer(duration, label, onComplete) {
+    clearInterval(activeTimerInterval);
+    
+    if (label === 'Countdown') {
+        isBuzzerLocked = true;
+        if (btnBuzzer) {
+            btnBuzzer.disabled = true;
+            btnBuzzer.textContent = 'WAIT...';
+        }
+    }
+    
+    globalTimerDisplay.classList.remove('hidden');
+    timerLabel.textContent = label;
+    timerText.textContent = duration;
+
+    let timeLeft = duration;
+    activeTimerInterval = setInterval(() => {
+        timeLeft--;
+        if (timeLeft > 0) {
+            timerText.textContent = timeLeft;
+        } else {
+            clearInterval(activeTimerInterval);
+            globalTimerDisplay.classList.add('hidden');
+            if (onComplete) onComplete();
+        }
+    }, 1000);
+}
+
+function stopGlobalTimer() {
+    clearInterval(activeTimerInterval);
+    globalTimerDisplay.classList.add('hidden');
+    isBuzzerLocked = false;
+}
+
 /* --- Initialization --- */
 function init() {
     const savedName = localStorage.getItem('buzzer_name');
@@ -136,6 +185,31 @@ function init() {
         hostIpInput.value = savedIP;
         joinIpInput.value = savedIP;
     }
+    
+    // Load cached Host Settings
+    const savedSound = localStorage.getItem('host_setting_sound');
+    if (savedSound) soundSelect.value = savedSound;
+
+    const savedPostBuzzToggle = localStorage.getItem('host_setting_post_toggle');
+    if (savedPostBuzzToggle !== null) {
+        postBuzzToggle.checked = savedPostBuzzToggle === 'true';
+        if (!postBuzzToggle.checked) postBuzzInputContainer.classList.add('hidden');
+    }
+
+    const savedPostBuzzTimer = localStorage.getItem('host_setting_post_timer');
+    if (savedPostBuzzTimer) postBuzzTimerInput.value = savedPostBuzzTimer;
+
+    const savedStartCountdownToggle = localStorage.getItem('host_setting_start_toggle');
+    if (savedStartCountdownToggle !== null) {
+        startCountdownToggle.checked = savedStartCountdownToggle === 'true';
+        if (!startCountdownToggle.checked) {
+            startCountdownInputContainer.classList.add('hidden');
+            btnStartCountdown.disabled = true;
+        }
+    }
+
+    const savedStartCountdownTimer = localStorage.getItem('host_setting_start_timer');
+    if (savedStartCountdownTimer) startCountdownTimerInput.value = savedStartCountdownTimer;
 }
 
 function switchView(viewName) {
@@ -235,6 +309,39 @@ btnCreate.addEventListener('click', () => {
     });
 });
 
+// Handle settings toggles & caching
+soundSelect.addEventListener('change', (e) => {
+    localStorage.setItem('host_setting_sound', e.target.value);
+});
+
+postBuzzTimerInput.addEventListener('change', (e) => {
+    localStorage.setItem('host_setting_post_timer', e.target.value);
+});
+
+startCountdownTimerInput.addEventListener('change', (e) => {
+    localStorage.setItem('host_setting_start_timer', e.target.value);
+});
+
+postBuzzToggle.addEventListener('change', (e) => {
+    localStorage.setItem('host_setting_post_toggle', e.target.checked);
+    if (e.target.checked) {
+        postBuzzInputContainer.classList.remove('hidden');
+    } else {
+        postBuzzInputContainer.classList.add('hidden');
+    }
+});
+
+startCountdownToggle.addEventListener('change', (e) => {
+    localStorage.setItem('host_setting_start_toggle', e.target.checked);
+    if (e.target.checked) {
+        startCountdownInputContainer.classList.remove('hidden');
+        btnStartCountdown.disabled = false;
+    } else {
+        startCountdownInputContainer.classList.add('hidden');
+        btnStartCountdown.disabled = true;
+    }
+});
+
 function handleBuzz(playerName) {
     const now = performance.now();
 
@@ -242,6 +349,18 @@ function handleBuzz(playerName) {
         firstBuzzTime = now;
         currentRound.push({ name: playerName, timeOffset: 0, formatted: '0ms' });
         playBuzzSound();
+
+        if (postBuzzToggle.checked) {
+            const postDuration = parseInt(postBuzzTimerInput.value, 10);
+            if (!isNaN(postDuration) && postDuration > 0) {
+                startGlobalTimer(postDuration, 'Time Left', () => {
+                    playBuzzSound();
+                    logHistory('System', 'Time\'s up!');
+                    broadcast({ type: 'times_up' });
+                });
+                broadcast({ type: 'post_buzz', duration: postDuration });
+            }
+        }
     } else {
         if (currentRound.find(r => r.name === playerName)) return;
         const diff = Math.round(now - firstBuzzTime);
@@ -258,9 +377,30 @@ function handleBuzz(playerName) {
 btnReset.addEventListener('click', () => {
     currentRound = [];
     firstBuzzTime = null;
+    stopGlobalTimer();
     logHistory('Host', 'Reset Buzzers', 'reset');
     updateHostDashboard();
     broadcast({ type: 'reset' });
+});
+
+btnStartCountdown.addEventListener('click', () => {
+    if (!startCountdownToggle.checked) return;
+    
+    const duration = parseInt(startCountdownTimerInput.value, 10);
+    if (isNaN(duration) || duration < 1) return showToast('Invalid countdown duration', 'error');
+
+    currentRound = [];
+    firstBuzzTime = null;
+    updateHostDashboard();
+    
+    startGlobalTimer(duration, 'Countdown', () => {
+        playBuzzSound();
+        logHistory('System', 'Countdown finished, buzzers unlocked!');
+        broadcast({ type: 'unlock_buzzers' });
+    });
+    
+    broadcast({ type: 'start_countdown', duration: duration });
+    logHistory('Host', `Started ${duration}s countdown`);
 });
 
 let confirmLeave = false;
@@ -487,12 +627,25 @@ btnJoin.addEventListener('click', () => {
             } else if (data.type === 'reset') {
                 currentRound = [];
                 renderResults(playerCurrentResults, currentRound);
+                stopGlobalTimer();
                 btnBuzzer.disabled = false;
                 btnBuzzer.textContent = 'BUZZ';
             } else if (data.type === 'session_ended') {
                 showToast('Session was ended by the host.', 'warning');
                 if (peer && !peer.destroyed) { peer.destroy(); }
                 setTimeout(() => window.location.reload(), 3000);
+            } else if (data.type === 'start_countdown') {
+                startGlobalTimer(data.duration, 'Countdown');
+            } else if (data.type === 'post_buzz') {
+                startGlobalTimer(data.duration, 'Time Left');
+            } else if (data.type === 'unlock_buzzers') {
+                isBuzzerLocked = false;
+                if (!currentRound.find(r => r.name === name)) {
+                    btnBuzzer.disabled = false;
+                    btnBuzzer.textContent = 'BUZZ';
+                }
+            } else if (data.type === 'times_up') {
+                stopGlobalTimer();
             }
         });
 
@@ -521,7 +674,7 @@ btnJoin.addEventListener('click', () => {
 });
 
 btnBuzzer.addEventListener('click', () => {
-    if (btnBuzzer.disabled) return;
+    if (btnBuzzer.disabled || isBuzzerLocked) return;
 
     // Disable UI instantly
     btnBuzzer.disabled = true;
