@@ -1,51 +1,51 @@
-# Local Buzz - Buzzer Timing Tool
+# peerBuzzer - Real-time Buzzer tool
 
-Local Buzz is a lightweight, mobile-first, zero-setup buzzer system for group trivia nights, game nights, and classrooms. It leverages WebRTC (via PeerJS) so everything runs directly peer-to-peer locally on your network without needing a centralized backend server.
+peerBuzzer is a lightweight, mobile-first, zero-setup buzzer tool for group trivia nights, game nights, and classrooms. It leverages WebRTC (via PeerJS) so everything runs directly peer-to-peer without needing a centralized backend server.
 
 ## Features
 
 - **No Installation Required:** Host and players simply navigate to the web page.
-- **Mobile-First Realtime UI:** Designed to prioritize playing cleanly on mobile phones as well as working on desktop.
-- **Peer-to-Peer:** Uses local IP addresses and WebRTC to connect.
+- **Modern Glassmorphism UI:** A sleek, responsive interface designed for both mobile and desktop.
+- **True Peer-to-Peer:** Uses WebRTC to establish direct connections between the host and players.
+- **Session-Based Joining:** Connect easily using a 6-character Session ID or by scanning a QR code—no IP addresses required.
 - **Host Dashboard:**
-  - View Live Results and timing offsets from the first buzzer.
-  - See active lobby members and connection status.
-  - Game history log and one-click "Reset Buzzers" button.
-  - Settings for different buzzer sounds including "Classic", "Arcade", "Alert" or Off. 
+  - **Host-Controlled Timers:** Start a countdown for players or set a post-buzz timer to limit response windows.
+  - **Live Results:** View timing offsets from the first buzzer in real-time.
+  - **Lobby Management:** See active players and their connection status (Connected, Away, Disconnected).
+  - **Sound Themes:** Choose from "Classic", "Arcade", "Alert", or silent modes.
+  - **Game History:** Persistent log of all buzzing activity during the session.
 - **Player Screen:**
-  - Fast, responsive giant buzzer button.
-  - Round Results and Real-time Lobby sync mirroring the host's connections.
+  - **Responsive Buzzer:** Fast-action button with haptic-simulating visual feedback.
+  - **Lobby Sync:** Real-time view of current round results and fellow players.
+  - **Reliable Reconnection:** Automatically attempts to re-establish connections if the network drops.
 
 ## How to Play
 
 ### 1. The Host
-- The host opens the page and looks up their device's Local IP address (e.g. `192.168.1.15`).
-- Enter the Local IP in the "Create Session" box and click the button.
-- The host will be taken to the dashboard and wait for users.
-- Connect your device to speakers to allow everyone to hear the buzzing sounds!
+- Open the application and click **"Host Session"**.
+- A unique 6-character **Session ID** and **QR Code** will be generated.
+- Share the Session ID or show the QR code to your players.
+- Use the **Settings** panel to configure buzzer sounds and timers.
 
 ### 2. The Players
-- Players must be on the **same local Wi-Fi network**.
-- Navigate to the page. 
-- Type a nickname and enter the **Host's Local IP** they provided.
-- Click "Join Session".
-- Wait for the question, then mash the buzzer!
+- Navigate to the application.
+- Click **"Join Session"**, enter your nickname and the **Session ID** provided by the host.
+- Alternatively, follow the direct session link or scan the QR code shared by the host.
+- Wait for the host to start the round, then be the first to buzz!
 
-## GitHub Pages Deployment
+## Deployment
 
-This application consists entirely of static HTML, CSS, and JS files (client-side only), making it exceptionally easy to host online.
+This application consists entirely of static HTML, CSS, and JS files, making it easy to host on services like **GitHub Pages**, **Vercel**, or **Netlify**.
 
-To host it for free on GitHub Pages:
-1. Ensure your files (`index.html`, `app.css`, `app.js`) are committed to your GitHub repository's main branch.
-2. Go to your repository's **Settings**.
-3. On the left sidebar, click **Pages**.
-4. Under "Build and deployment", select **Deploy from a branch**.
-5. Choose your `main` branch and `/ (root)` folder, then click **Save**.
-6. GitHub will automatically build and publish the site. Your link will appear at the top of the Pages settings!
-
-*Note: Even when hosted on the open internet via GitHub Pages, the underlying connection protocol (WebRTC) will still allow players to connect peer-to-peer over your local network using the host's Local IP.*
+To host on GitHub Pages:
+1. Commit your files (`index.html`, `app.css`, `app.js`) to your repository.
+2. Go to **Settings > Pages**.
+3. Select the `main` branch and `/ (root)` folder, then click **Save**.
 
 ## Built With
-- HTML5, Vanilla JavaScript, CSS3
-- [PeerJS](https://peerjs.com/) for WebRTC data connections.
-- Web Audio API for synthesized buzzer sounds.
+
+- **HTML5 & CSS3:** Featuring a custom glassmorphism design tool.
+- **Vanilla JavaScript:** Clean, dependency-light logic.
+- **[PeerJS](https://peerjs.com/):** For WebRTC data abstraction.
+- **[QRCode.js](https://github.com/davidshimjs/qrcodejs):** For session sharing.
+- **Web Audio API:** For low-latency synthesized buzzer sounds.

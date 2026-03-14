@@ -4,174 +4,328 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Buzzer Timing Tool</title>
+    <title>peerBuzzer</title>
     <link rel="stylesheet" href="app.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Inter:wght@400;600;800&display=swap"
+        rel="stylesheet">
+    <!-- Include Lucide icons via CDN, then apply them with standard SVGs to be standalone or JS driven if required. We'll stick to raw SVGs for simplicity since app.js might just write them or we don't want external deps. -->
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 </head>
 
 <body>
-    <div id="app" class="screen-entry">
-        <!-- Entry Screen -->
-        <div id="entry-screen" class="view active">
-            <h1 class="logo">Buzzer<span>Timing</span></h1>
+    <!-- Toast Notifications -->
+    <div id="toast-container"></div>
 
-            <div class="glass-card flex-row">
-                <!-- Host Section -->
-                <div class="section">
-                    <h2>Create Session (Host)</h2>
-                    <p class="instruction">Quick Tip: Find your Local IP (e.g., 192.168.1.15) to use as the Room ID for
-                        players to join.</p>
-                    <input type="text" id="host-ip-input" placeholder="Your Local IP" />
-                    <button id="btn-create" class="btn primary">Create Session</button>
+    <!-- Global Timer Display -->
+    <div id="global-timer-display" class="timer-overlay hidden">
+        <div class="timer-circle-massive glow-blue">
+            <span id="timer-text">--</span>
+        </div>
+        <p id="timer-label" class="timer-label-massive">Countdown</p>
+    </div>
+
+    <!-- Custom Modal for Renaming -->
+    <div id="rename-modal" class="glass-modal hidden">
+        <div class="glass-modal-content">
+            <h3>Change Display Name</h3>
+            <div class="input-group">
+                <input type="text" id="rename-input" placeholder="New Name" class="glass-input" />
+            </div>
+            <div class="modal-actions">
+                <button id="btn-rename-cancel" class="btn btn-glass-outline">Cancel</button>
+                <button id="btn-rename-save" class="btn btn-glass-primary">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="app" class="app-container">
+
+        <!-- Entry Screen -->
+        <div id="entry-screen" class="view active entry-view">
+            <div class="entry-card glass-panel flex-center-col">
+                <div class="logo-container">
+                    <h1 class="logo-main glow-text">peer<span>Buzzer</span></h1>
+                    <p class="subtitle">Lightning-fast real-time buzzer</p>
                 </div>
 
-                <div class="divider"></div>
+                <div id="entry-main-actions" class="entry-actions flex-col w-full fade-in-up">
+                    <button id="btn-create" class="btn btn-neon-blue btn-xl">Host Session</button>
+                    <button id="btn-show-join" class="btn btn-glass-secondary btn-xl mt-4">Join Session</button>
+                </div>
 
-                <!-- Player Section -->
-                <div class="section">
-                    <h2>Join Session (Player)</h2>
-                    <input type="text" id="player-name-input" placeholder="Your Name" />
-                    <input type="text" id="join-ip-input" placeholder="Host's Local IP" />
-                    <button id="btn-join" class="btn secondary">Join Session</button>
+                <!-- Player Section (Hidden initially) -->
+                <div id="entry-join-section" class="join-section flex-col w-full hidden fade-in-up">
+                    <div class="join-header flex-row-between">
+                        <h2>Join as Player</h2>
+                        <button class="btn-icon btn-back-main" title="Back">
+                            <svg viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" stroke-width="2"
+                                fill="none" stroke-linecap="round" stroke-linejoin="round">
+                                <line x1="19" y1="12" x2="5" y2="12"></line>
+                                <polyline points="12 19 5 12 12 5"></polyline>
+                            </svg>
+                        </button>
+                    </div>
+
+                    <div class="input-group mt-6">
+                        <label for="player-name-input">Display Name</label>
+                        <input type="text" id="player-name-input" class="glass-input"
+                            placeholder="e.g. TriviaMaster99" />
+                    </div>
+
+                    <div id="player-default-ui" class="input-group mt-4">
+                        <label for="join-session-input">Session ID</label>
+                        <input type="text" id="join-session-input"
+                            class="glass-input uppercase-input text-center tracked" placeholder="XXXXXX"
+                            maxlength="6" />
+                    </div>
+
+                    <button id="btn-join" class="btn btn-neon-green btn-xl mt-6 w-full">Join Session</button>
                 </div>
             </div>
         </div>
 
         <!-- Host Dashboard Screen -->
-        <div id="host-screen" class="view">
-            <header>
-                <div class="header-info">
-                    <h2>Host Panel</h2>
-                    <span class="badge" id="host-room-badge">IP: --</span>
+        <div id="host-screen" class="view host-view fade-in" style="display: none;">
+            <header class="dashboard-header glass-panel">
+                <div class="header-brand">
+                    <h1 class="logo-small">peer<span>Buzzer</span></h1>
                 </div>
-                <div class="controls" style="position: relative;">
-                    <div class="settings-dropdown" id="host-settings-panel">
-                        <div class="setting-control">
-                            <label for="sound-select" class="label-text">Sound:</label>
-                            <select id="sound-select" class="styled-select" style="flex: 1;">
-                                <option value="classic">Classic Buzzer</option>
-                                <option value="arcade">Arcade Beep</option>
-                                <option value="alert">Alert Tone</option>
-                                <option value="off">Off</option>
-                            </select>
-                        </div>
-                        <div class="setting-control setting-toggle-group">
-                            <div class="toggle-header">
-                                <label for="post-buzz-toggle" class="label-text">Post Buzz Counter</label>
-                                <label class="switch">
-                                    <input type="checkbox" id="post-buzz-toggle" checked>
-                                    <span class="slider round"></span>
-                                </label>
+
+                <div class="header-center">
+                    <div class="session-pill-wrap">
+                        <button id="btn-toggle-qr" class="session-pill glow-border" title="Click to show/hide QR code">
+                            <span class="pill-label">SESSION</span>
+                            <span class="badge tracking-widest" id="host-room-badge">--</span>
+                            <div id="qrcode-wrapper" class="qr-popup hidden">
+                                <div id="qrcode-container"></div>
                             </div>
-                            <div class="time-input-container" id="post-buzz-input-container">
-                                <label for="post-buzz-timer" class="label-small">Duration (sec):</label>
-                                <input type="number" id="post-buzz-timer" class="styled-select" value="5" min="0"
-                                    max="99" style="width: 70px;">
-                            </div>
-                        </div>
-                        <div class="setting-control setting-toggle-group">
-                            <div class="toggle-header">
-                                <label for="start-countdown-toggle" class="label-text">Host Countdown</label>
-                                <label class="switch">
-                                    <input type="checkbox" id="start-countdown-toggle" checked>
-                                    <span class="slider round"></span>
-                                </label>
-                            </div>
-                            <div class="time-input-container" id="start-countdown-input-container">
-                                <label for="start-countdown-timer" class="label-small">Duration (sec):</label>
-                                <input type="number" id="start-countdown-timer" class="styled-select" value="10" min="1"
-                                    max="99" style="width: 70px;">
-                            </div>
-                        </div>
-                        <button id="btn-host-leave" class="btn danger outline w-full">End Session</button>
+                        </button>
                     </div>
-                    <button id="btn-settings" class="btn outline icon-btn" aria-label="Settings" title="Settings">
+                </div>
+
+                <div class="header-controls">
+                    <div class="status-pill">
+                        <span class="status-dot green pulse"></span>
+                        <span class="status-text">Live</span>
+                    </div>
+
+                    <div class="settings-wrapper">
+                        <button id="btn-settings" class="btn-icon glow-hover" aria-label="Settings" title="Settings">
+                            <svg viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" stroke-width="2"
+                                fill="none" stroke-linecap="round" stroke-linejoin="round">
+                                <circle cx="12" cy="12" r="3"></circle>
+                                <path
+                                    d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z">
+                                </path>
+                            </svg>
+                        </button>
+
+                        <!-- Settings Dropdown -->
+                        <div class="settings-dropdown glass-panel" id="host-settings-panel">
+                            <h3 class="dropdown-title">Host Settings</h3>
+
+                            <div class="setting-group">
+                                <label for="sound-select" class="setting-label">Sound Theme</label>
+                                <div class="select-wrapper">
+                                    <select id="sound-select" class="glass-select w-full">
+                                        <option value="classic">Classic Buzzer</option>
+                                        <option value="arcade">Arcade Beep</option>
+                                        <option value="alert">Alert Tone</option>
+                                        <option value="off">Off</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="setting-group toggle-group glass-box">
+                                <div class="toggle-row">
+                                    <div class="toggle-info">
+                                        <label for="post-buzz-toggle" class="setting-label mb-0">Post Buzz
+                                            Counter</label>
+                                    </div>
+                                    <label class="toggle-switch">
+                                        <input type="checkbox" id="post-buzz-toggle" checked>
+                                        <span class="toggle-slider"></span>
+                                    </label>
+                                </div>
+                                <div class="time-input-row" id="post-buzz-input-container">
+                                    <label for="post-buzz-timer">Seconds:</label>
+                                    <input type="number" id="post-buzz-timer" class="glass-input small-number-input"
+                                        value="5" min="0" max="99">
+                                </div>
+                            </div>
+
+                            <div class="setting-group toggle-group glass-box">
+                                <div class="toggle-row">
+                                    <div class="toggle-info">
+                                        <label for="start-countdown-toggle" class="setting-label mb-0">Host
+                                            Timer</label>
+                                    </div>
+                                    <label class="toggle-switch">
+                                        <input type="checkbox" id="start-countdown-toggle" checked>
+                                        <span class="toggle-slider"></span>
+                                    </label>
+                                </div>
+                                <div class="time-input-row" id="start-countdown-input-container">
+                                    <label for="start-countdown-timer">Seconds:</label>
+                                    <input type="number" id="start-countdown-timer"
+                                        class="glass-input small-number-input" value="10" min="1" max="99">
+                                </div>
+                            </div>
+
+                            <div class="danger-zone mt-4 pt-4 divider-top">
+                                <button id="btn-host-leave" class="btn btn-neon-red w-full">End Session</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </header>
+
+            <div class="host-main-action-zone">
+                <button id="btn-start-countdown" class="btn btn-neon-blue btn-jumbo shadow-glow-blue glow-hover-scale">
+                    <span class="btn-text">Start Timer</span>
+                </button>
+                <button id="btn-reset" class="btn btn-neon-amber btn-jumbo shadow-glow-amber glow-hover-scale">
+                    <span class="btn-text">Reset Round</span>
+                </button>
+            </div>
+
+            <div class="dashboard-grid layout-3col">
+                <!-- Current Round (Largest Column) -->
+                <div class="glass-panel col-main flex-col">
+                    <div class="panel-header">
+                        <div class="flex-row-center gap-2">
+                            <svg viewBox="0 0 24 24" width="20" height="20" stroke="var(--neon-blue)" stroke-width="2"
+                                fill="none">
+                                <polygon
+                                    points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2">
+                                </polygon>
+                            </svg>
+                            <h3>Current Round</h3>
+                        </div>
+                    </div>
+                    <div class="panel-content scrollable h-full relative">
+                        <!-- Empty state / Initial state inside UL via CSS empty pseudo or app.js logic -->
+                        <ul id="host-current-results" class="results-list styled-list">
+                            <!-- Populated by JS -->
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Lobby (Medium Priority) -->
+                <div class="glass-panel col-side flex-col">
+                    <div class="panel-header">
+                        <div class="flex-row-center gap-2">
+                            <svg viewBox="0 0 24 24" width="20" height="20" stroke="var(--neon-green)" stroke-width="2"
+                                fill="none">
+                                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                                <circle cx="9" cy="7" r="4"></circle>
+                                <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                                <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                            </svg>
+                            <h3>Lobby</h3>
+                        </div>
+                    </div>
+                    <div class="panel-content scrollable">
+                        <ul id="host-lobby-list" class="lobby-list styled-list compact-list">
+                            <!-- Populated by JS -->
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Game History (Smallest Column) -->
+                <div class="glass-panel col-side sys-log flex-col">
+                    <div class="panel-header">
+                        <div class="flex-row-center gap-2">
+                            <svg viewBox="0 0 24 24" width="20" height="20" stroke="var(--text-secondary)"
+                                stroke-width="2" fill="none">
+                                <polyline points="4 7 4 4 20 4 20 7"></polyline>
+                                <line x1="9" y1="20" x2="15" y2="20"></line>
+                                <line x1="12" y1="4" x2="12" y2="20"></line>
+                            </svg>
+                            <h3 class="text-muted">Activity Log</h3>
+                        </div>
+                    </div>
+                    <div class="panel-content log-terminal scrollable" id="host-history-log">
+                        <!-- Populated by JS -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Player Screen (Background for Entry unless navigating away) -->
+        <div id="player-screen" class="view active player-view fade-in flex-col h-screen">
+            <header class="player-header glass-panel">
+                <div class="player-identity">
+                    <div class="avatar-circle glow-blue-soft">
                         <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2"
+                            fill="none">
+                            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                            <circle cx="12" cy="7" r="4"></circle>
+                        </svg>
+                    </div>
+                    <div class="identity-text">
+                        <h2 id="player-display-name">Player</h2>
+                        <span id="player-conn-status" class="status-text small green"><span
+                                class="status-dot inline"></span>Connected</span>
+                    </div>
+                    <button id="btn-edit-name" class="btn-icon subtle" title="Edit Name">
+                        <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2"
                             fill="none" stroke-linecap="round" stroke-linejoin="round">
-                            <circle cx="12" cy="12" r="3"></circle>
-                            <path
-                                d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z">
-                            </path>
+                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                        </svg>
+                    </button>
+                </div>
+
+                <div class="player-session-info flex-row-center gap-4">
+                    <div class="session-badge glass-box">
+                        <span class="label">ID</span>
+                        <span class="value tracked" id="player-room-badge">--</span>
+                    </div>
+                    <button id="btn-player-leave" class="btn-icon danger fade-hover" title="Leave Session">
+                        <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2"
+                            fill="none">
+                            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                            <polyline points="16 17 21 12 16 7"></polyline>
+                            <line x1="21" y1="12" x2="9" y2="12"></line>
                         </svg>
                     </button>
                 </div>
             </header>
 
-            <div class="host-main-action" style="gap: 1rem;">
-                <button id="btn-start-countdown" class="btn secondary btn-massive">Start Timer</button>
-                <button id="btn-reset" class="btn warning btn-massive">Reset</button>
-            </div>
-
-            <div class="dashboard-grid">
-                <!-- Current Round -->
-                <div class="glass-card panel">
-                    <h3>Dashboard</h3>
-                    <ul id="host-current-results" class="results-list"></ul>
+            <div class="player-main flex-1 flex-center-col">
+                <div class="buzzer-wrapper">
+                    <button id="btn-buzzer" class="buzzer-massive glow-ready relative overflow-hidden">
+                        <span class="buzzer-text relative z-10">BUZZ</span>
+                        <div class="buzzer-ripple"></div>
+                    </button>
                 </div>
 
-                <!-- Lobby -->
-                <div class="glass-card panel">
-                    <h3>Lobby</h3>
-                    <ul id="host-lobby-list" class="lobby-list"></ul>
-                </div>
-
-                <!-- Game History -->
-                <div class="glass-card panel wide">
-                    <h3>Game History</h3>
-                    <div id="host-history-log" class="history-log"></div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Player Screen -->
-        <div id="player-screen" class="view">
-            <header>
-                <div class="header-info">
-                    <h2 id="player-display-name">Player</h2>
-                    <div>
-                        <span class="badge" id="player-room-badge">Host IP: --</span>
-                        <span class="badge" id="player-conn-status"
-                            style="margin-left: 0.5rem; background: rgba(35, 134, 54, 0.2); color: var(--secondary);">Connected</span>
+                <!-- Info Area below buzzer on mobile -->
+                <div class="player-bottom-drawer mt-auto w-full max-w-lg mb-8 px-4">
+                    <div class="glass-panel w-full p-4 max-h-48 overflow-y-auto custom-scrollbar">
+                        <div class="grid grid-cols-2 gap-4">
+                            <div class="results-preview">
+                                <h4
+                                    class="text-xs text-secondary-muted uppercase tracking-widest mb-2 pb-1 border-b border-white-10">
+                                    Round</h4>
+                                <ul id="player-current-results" class="results-list styled-list text-sm m-0 p-0"></ul>
+                            </div>
+                            <div class="lobby-preview">
+                                <h4
+                                    class="text-xs text-secondary-muted uppercase tracking-widest mb-2 pb-1 border-b border-white-10">
+                                    Lobby</h4>
+                                <ul id="player-lobby-list" class="lobby-list text-sm m-0 p-0"></ul>
+                            </div>
+                        </div>
                     </div>
                 </div>
-            </header>
-
-            <div class="player-main">
-                <div class="buzzer-container">
-                    <button id="btn-buzzer" class="buzzer">BUZZ</button>
-                </div>
-
-                <div class="glass-card panel current-results-panel">
-                    <h3>Round Results</h3>
-                    <ul id="player-current-results" class="results-list"></ul>
-                </div>
-
-                <!-- Player Lobby -->
-                <div class="glass-card panel current-results-panel">
-                    <h3>Lobby</h3>
-                    <ul id="player-lobby-list" class="lobby-list"></ul>
-                </div>
-
-                <div class="player-footer" style="width: 100%; text-align: center; margin-top: 1rem;">
-                    <button id="btn-player-leave" class="btn danger outline w-full">Leave Session</button>
-                </div>
             </div>
         </div>
-    </div>
 
-    <!-- Toast Notifications -->
-    <div id="toast-container"></div>
-
-    <!-- Global Timer Display -->
-    <div id="global-timer-display" class="glass-card timer-card hidden">
-        <div class="timer-circle">
-            <span id="timer-text">--</span>
-        </div>
-        <p id="timer-label">Countdown</p>
-    </div>
-
-    <script src="app.js"></script>
+        <script src="app.js"></script>
 </body>
 
 </html>

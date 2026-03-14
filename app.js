@@ -5,15 +5,26 @@ const views = {
     player: document.getElementById('player-screen')
 };
 
+// Ensure host is completely hidden on load so it doesn't cause layout issues
+views.host.style.display = 'none';
+
 // Entry
-const hostIpInput = document.getElementById('host-ip-input');
-const btnCreate = document.getElementById('btn-create');
+const entryMainActions = document.getElementById('entry-main-actions');
+const entryJoinSection = document.getElementById('entry-join-section');
+const btnShowJoin = document.getElementById('btn-show-join');
+const btnsBackMain = document.querySelectorAll('.btn-back-main');
+
 const playerNameInput = document.getElementById('player-name-input');
-const joinIpInput = document.getElementById('join-ip-input');
+const btnCreate = document.getElementById('btn-create');
+
+const joinSessionInput = document.getElementById('join-session-input');
 const btnJoin = document.getElementById('btn-join');
 
 // Host
+const qrcodeWrapper = document.getElementById('qrcode-wrapper');
+const qrcodeContainer = document.getElementById('qrcode-container');
 const hostRoomBadge = document.getElementById('host-room-badge');
+const btnToggleQr = document.getElementById('btn-toggle-qr');
 const btnReset = document.getElementById('btn-reset');
 const btnStartCountdown = document.getElementById('btn-start-countdown');
 const postBuzzTimerInput = document.getElementById('post-buzz-timer');
@@ -32,6 +43,11 @@ const hostHistoryLog = document.getElementById('host-history-log');
 
 // Player
 const playerDisplayName = document.getElementById('player-display-name');
+const btnEditName = document.getElementById('btn-edit-name');
+const renameModal = document.getElementById('rename-modal');
+const renameInput = document.getElementById('rename-input');
+const btnRenameCancel = document.getElementById('btn-rename-cancel');
+const btnRenameSave = document.getElementById('btn-rename-save');
 const playerRoomBadge = document.getElementById('player-room-badge');
 const btnPlayerLeave = document.getElementById('btn-player-leave');
 const btnBuzzer = document.getElementById('btn-buzzer');
@@ -45,6 +61,8 @@ const timerText = document.getElementById('timer-text');
 const timerLabel = document.getElementById('timer-label');
 
 /* --- State --- */
+const PROJECT_KEY = "peer-buzz-2dbc9822-8302-";
+let sessionQrcode = null;
 let peer = null;
 let hostConn = null; // Player's connection to host
 let playerConns = {}; // Host's connections to players
@@ -143,7 +161,7 @@ function playBuzzSound() {
 /* --- Utility Functions & Timers --- */
 function startGlobalTimer(duration, label, onComplete) {
     clearInterval(activeTimerInterval);
-    
+
     if (label === 'Countdown') {
         isBuzzerLocked = true;
         if (btnBuzzer) {
@@ -151,7 +169,7 @@ function startGlobalTimer(duration, label, onComplete) {
             btnBuzzer.textContent = 'WAIT...';
         }
     }
-    
+
     globalTimerDisplay.classList.remove('hidden');
     timerLabel.textContent = label;
     timerText.textContent = duration;
@@ -178,14 +196,32 @@ function stopGlobalTimer() {
 /* --- Initialization --- */
 function init() {
     const savedName = localStorage.getItem('buzzer_name');
-    const savedIP = localStorage.getItem('buzzer_ip');
+    if (savedName && playerNameInput) playerNameInput.value = savedName;
 
-    if (savedName) playerNameInput.value = savedName;
-    if (savedIP) {
-        hostIpInput.value = savedIP;
-        joinIpInput.value = savedIP;
+    const urlParams = new URLSearchParams(window.location.search);
+    const sessionParam = urlParams.get('session');
+
+    if (sessionParam) {
+        // Hide Main "Choose Role"
+        entryMainActions.classList.add('hidden');
+
+        if (savedName) {
+            // Bypass completely and join
+            joinSessionInput.value = sessionParam.toUpperCase();
+            setTimeout(() => {
+                if (btnJoin) btnJoin.click();
+            }, 100);
+        } else {
+            // Show only the Join section, prefill and hide Session ID
+            entryJoinSection.classList.remove('hidden');
+            joinSessionInput.value = sessionParam.toUpperCase();
+            joinSessionInput.classList.add('hidden');
+            // Also hide the back button since they came from a link
+            btnsBackMain.forEach(btn => btn.classList.add('hidden'));
+            if (playerNameInput) playerNameInput.focus();
+        }
     }
-    
+
     // Load cached Host Settings
     const savedSound = localStorage.getItem('host_setting_sound');
     if (savedSound) soundSelect.value = savedSound;
@@ -203,8 +239,8 @@ function init() {
     if (savedStartCountdownToggle !== null) {
         startCountdownToggle.checked = savedStartCountdownToggle === 'true';
         if (!startCountdownToggle.checked) {
-            startCountdownInputContainer.classList.add('hidden');
-            btnStartCountdown.disabled = true;
+            if (startCountdownInputContainer) startCountdownInputContainer.classList.add('hidden');
+            if (btnStartCountdown) btnStartCountdown.disabled = true;
         }
     }
 
@@ -213,31 +249,108 @@ function init() {
 }
 
 function switchView(viewName) {
-    Object.values(views).forEach(v => v.classList.remove('active'));
-    views[viewName].classList.add('active');
+    Object.keys(views).forEach(key => {
+        const v = views[key];
+        v.classList.remove('active');
+        if (v.id === 'player-screen' || v.id === 'host-screen') {
+            v.style.display = 'none';
+        }
+    });
+
+    const targetView = views[viewName];
+    targetView.classList.add('active');
+
+    // Specifically un-hide the target view if it was hard-hidden
+    if (viewName === 'player' || viewName === 'host') {
+        targetView.style.display = 'flex';
+    }
 }
 
-function getPeerIdFromIP(ip) {
-    return 'buzzer-' + ip.trim().replace(/\./g, '-');
+/* --- Entry UI Navigation Logic --- */
+if (btnShowJoin) {
+    btnShowJoin.addEventListener('click', () => {
+        entryMainActions.classList.add('hidden');
+        entryJoinSection.classList.remove('hidden');
+        entryJoinSection.style.animation = 'fadeIn 0.3s ease-out forwards';
+        if (playerNameInput && !playerNameInput.value) {
+            playerNameInput.focus();
+        } else if (joinSessionInput) {
+            joinSessionInput.focus();
+        }
+    });
 }
+
+btnsBackMain.forEach(btn => {
+    btn.addEventListener('click', () => {
+        // Stop any in-progress peer connection attempt
+        if (hostConn) {
+            try { hostConn.close(); } catch (e) {}
+            hostConn = null;
+        }
+        if (peer && !peer.destroyed) {
+            try { peer.destroy(); } catch (e) {}
+            peer = null;
+        }
+
+        // Reset join button to its original state
+        if (btnJoin) {
+            btnJoin.disabled = false;
+            btnJoin.textContent = 'Join Session';
+            btnJoin.onclick = null;
+        }
+
+        // Clear session from URL params
+        window.history.replaceState({}, '', window.location.pathname);
+
+        // Reset join input
+        joinSessionInput.value = '';
+        joinSessionInput.classList.remove('hidden');
+
+        // Navigate back to main actions
+        entryJoinSection.classList.add('hidden');
+        entryMainActions.classList.remove('hidden');
+        entryMainActions.style.animation = 'fadeIn 0.3s ease-out forwards';
+    });
+});
 
 /* --- Host Logic --- */
-btnCreate.addEventListener('click', () => {
-    const ip = hostIpInput.value.trim();
-    if (!ip) return showToast('Please enter your Local IP', 'error');
+if (btnCreate) {
+    btnCreate.addEventListener('click', () => {
+        const shortId = Math.random().toString(36).substr(2, 6).toUpperCase();
 
-    localStorage.setItem('buzzer_ip', ip);
+        btnCreate.disabled = true;
+        btnCreate.textContent = 'Creating...';
 
-    btnCreate.disabled = true;
-    btnCreate.textContent = 'Creating...';
+        const peerId = PROJECT_KEY + shortId;
+        const peerInstance = new Peer(peerId);
 
-    const peerId = getPeerIdFromIP(ip);
-    peer = new Peer(peerId);
+        setupHostServer(peerInstance, shortId);
+    });
+}
+
+function setupHostServer(peerInstance, displayId) {
+    peer = peerInstance;
 
     peer.on('open', (id) => {
-        hostRoomBadge.textContent = 'IP: ' + ip;
+        hostRoomBadge.innerHTML = 'ID: ' + displayId;
+        openQrCode();
+        qrcodeContainer.innerHTML = '';
+
+        const joinUrl = window.location.origin + window.location.pathname + '?session=' + displayId;
+
+        // Update browser URL
+        window.history.pushState({}, '', '?session=' + displayId);
+
+        sessionQrcode = new QRCode(qrcodeContainer, {
+            text: joinUrl,
+            width: 120,
+            height: 120,
+            colorDark: "#000000",
+            colorLight: "#ffffff",
+            correctLevel: QRCode.CorrectLevel.L
+        });
         switchView('host');
-        logHistory('System', 'Session created at ' + ip);
+        logHistory('System', 'Session created ' + displayId);
     });
 
     peer.on('connection', (conn) => {
@@ -284,6 +397,21 @@ btnCreate.addEventListener('click', () => {
                         }
                     }
                 }
+            } else if (data.type === 'update_name') {
+                if (lobbyState[conn.peer]) {
+                    const oldName = lobbyState[conn.peer].name;
+                    lobbyState[conn.peer].name = data.newName;
+
+                    // Update current round occurrences
+                    currentRound.forEach(r => {
+                        if (r.name === oldName) r.name = data.newName;
+                    });
+
+                    updateHostLobby();
+                    updateHostDashboard();
+                    broadcast({ type: 'round_update', results: currentRound });
+                    logHistory('System', `${oldName} changed name to ${data.newName}`);
+                }
             } else if (data.type === 'leave') {
                 if (lobbyState[conn.peer]) {
                     lobbyState[conn.peer].status = 'disconnected';
@@ -303,11 +431,13 @@ btnCreate.addEventListener('click', () => {
     });
 
     peer.on('error', (err) => {
-        btnCreate.disabled = false;
-        btnCreate.textContent = 'Create Session';
+        if (btnCreate) {
+            btnCreate.disabled = false;
+            btnCreate.textContent = 'Create Session';
+        }
         showToast('Server Error: ' + err.message, 'error');
     });
-});
+}
 
 // Handle settings toggles & caching
 soundSelect.addEventListener('change', (e) => {
@@ -385,20 +515,20 @@ btnReset.addEventListener('click', () => {
 
 btnStartCountdown.addEventListener('click', () => {
     if (!startCountdownToggle.checked) return;
-    
+
     const duration = parseInt(startCountdownTimerInput.value, 10);
     if (isNaN(duration) || duration < 1) return showToast('Invalid countdown duration', 'error');
 
     currentRound = [];
     firstBuzzTime = null;
     updateHostDashboard();
-    
+
     startGlobalTimer(duration, 'Countdown', () => {
         playBuzzSound();
         logHistory('System', 'Countdown finished, buzzers unlocked!');
         broadcast({ type: 'unlock_buzzers' });
     });
-    
+
     broadcast({ type: 'start_countdown', duration: duration });
     logHistory('Host', `Started ${duration}s countdown`);
 });
@@ -413,6 +543,7 @@ btnHostLeave.addEventListener('click', () => {
     }
     broadcast({ type: 'session_ended' });
     peer.destroy();
+    window.history.pushState({}, '', window.location.pathname);
     window.location.reload();
 });
 
@@ -427,6 +558,22 @@ document.addEventListener('click', (e) => {
         hostSettingsPanel.classList.remove('active');
     }
 });
+
+// QR Code toggle — clicking the session pill shows/hides the QR popup
+function openQrCode() {
+    if (qrcodeWrapper) qrcodeWrapper.classList.remove('hidden');
+}
+
+function closeQrCode() {
+    if (qrcodeWrapper) qrcodeWrapper.classList.add('hidden');
+}
+
+if (btnToggleQr) {
+    btnToggleQr.addEventListener('click', (e) => {
+        e.stopPropagation();
+        qrcodeWrapper.classList.toggle('hidden');
+    });
+}
 
 function broadcast(msg) {
     Object.values(playerConns).forEach(conn => {
@@ -450,12 +597,21 @@ function updateHostLobby() {
             statusClass = 'away';
             displayStatus = 'away';
             showRemoveBtn = true;
+        } else if (player.status === 'connected') {
+            showRemoveBtn = true; // allow kicking active players too
         }
 
         let removeBtnHtml = '';
         if (showRemoveBtn) {
-            removeBtnHtml = `<button class="btn info icon-btn btn-remove-player" style="padding: 0.2rem !important; margin-left:1rem" data-id="${peerId}" title="Remove Player">
-                <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            let btnClass = player.status === 'connected' ? 'danger' : 'info';
+            let btnTitle = player.status === 'connected' ? 'Kick Player' : 'Remove Player';
+            let iconHtml = player.status === 'connected' ?
+                `<svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>`
+                :
+                `<svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`;
+
+            removeBtnHtml = `<button class="btn ${btnClass} icon-btn btn-remove-player" style="padding: 0.2rem !important; margin-left:1rem" data-id="${peerId}" title="${btnTitle}">
+                ${iconHtml}
             </button>`;
         }
 
@@ -472,10 +628,19 @@ function updateHostLobby() {
         btn.addEventListener('click', (e) => {
             const id = e.currentTarget.getAttribute('data-id');
             const pName = lobbyState[id].name;
+            const pStatus = lobbyState[id].status;
+
+            if (pStatus === 'connected' && playerConns[id] && playerConns[id].open) {
+                // Send kick message
+                playerConns[id].send({ type: 'kicked' });
+                logHistory('System', `Kicked ${pName} from session`);
+            } else {
+                logHistory('System', `Cleared ${pName} from lobby`);
+            }
+
             delete lobbyState[id];
             delete playerConns[id];
             updateHostLobby();
-            logHistory('System', `Cleared ${pName} from lobby`);
         });
     });
 }
@@ -493,19 +658,48 @@ function logHistory(actor, action, specialClass = '') {
 }
 
 /* --- Player Logic --- */
-btnJoin.addEventListener('click', () => {
-    const name = playerNameInput.value.trim();
-    const ip = joinIpInput.value.trim();
+if (btnJoin) { // When the player tries to join
+    btnJoin.addEventListener('click', () => {
+        const name = playerNameInput.value.trim();
+        const sessionId = joinSessionInput.value.trim().toUpperCase();
 
-    if (!name || !ip) return showToast('Please enter both Name and Host IP', 'error');
+        if (!name) {
+            showToast('Please enter your name.', 'error');
+            return;
+        }
+        if (!sessionId || sessionId.length !== 6) {
+            showToast('Please enter a valid 6-character Session ID.', 'error');
+            return;
+        }
 
-    localStorage.setItem('buzzer_name', name);
-    localStorage.setItem('buzzer_ip', ip);
+        localStorage.setItem('buzzer_name', name);
 
-    btnJoin.disabled = true;
-    btnJoin.textContent = 'Joining...';
+        btnJoin.disabled = true;
+        btnJoin.textContent = 'Joining...';
 
+        const targetPeerId = PROJECT_KEY + sessionId;
+        startPlayerConnection(name, targetPeerId, sessionId);
+    });
+
+    // Format Session ID input in real-time
+    joinSessionInput.addEventListener('input', (e) => {
+        let val = e.target.value;
+        // Remove anything that is not A-Z or 0-9
+        val = val.replace(/[^A-Za-z0-9]/g, '');
+        // Convert to uppercase
+        val = val.toUpperCase();
+        // Limit to 6 characters
+        if (val.length > 6) {
+            val = val.substring(0, 6);
+        }
+        e.target.value = val;
+    });
+}
+
+function startPlayerConnection(name, targetPeerId, displayId) {
     let isReconnecting = false;
+    let intentionalDisconnect = false;
+    let retryAttempts = 0;
 
     function updatePlayerStatus(status, text) {
         if (!playerConnStatus) return;
@@ -522,17 +716,17 @@ btnJoin.addEventListener('click', () => {
         }
     }
 
-    function connectToHost(ip, name) {
+    function connectToHost(name, targetPeerId, displayId) {
         if (!peer) {
             peer = new Peer();
         }
 
         peer.on('open', (id) => {
-            establishConnection(ip, name);
+            establishConnection(name, targetPeerId, displayId);
         });
 
         peer.on('disconnected', () => {
-            if (!isReconnecting) {
+            if (!isReconnecting && !intentionalDisconnect) {
                 isReconnecting = true;
                 updatePlayerStatus('reconnecting', 'Reconnecting...');
                 showToast('Connection lost. Reconnecting...', 'warning');
@@ -545,39 +739,80 @@ btnJoin.addEventListener('click', () => {
         });
 
         peer.on('error', (err) => {
+            if (intentionalDisconnect) return;
+
             const retryErrors = ['network', 'disconnected', 'fatal', 'peer-unavailable', 'server-error', 'socket-error', 'socket-closed', 'webrtc'];
 
             if (retryErrors.includes(err.type)) {
                 if (!isReconnecting) {
+                    retryAttempts++;
                     isReconnecting = true;
-                    updatePlayerStatus('reconnecting', 'Reconnecting...');
-                    showToast('Connection lost. Reconnecting...', 'warning');
+                    updatePlayerStatus('reconnecting', `Reconnecting (Attempt ${retryAttempts})...`);
+                    if (err.type === 'peer-unavailable') {
+                        showToast(`Host not found. Retrying (${retryAttempts})...`, 'warning');
+                    } else {
+                        showToast(`Connection lost. Retrying (${retryAttempts})...`, 'warning');
+                    }
+
                     if (hostConn) { hostConn.close(); }
                     if (peer && !peer.destroyed) { peer.destroy(); }
                     peer = null;
+
+                    // If they auto-joined, the entry screen might be hidden. Force show it.
+                    if (!document.getElementById('entry-screen').classList.contains('active')) {
+                        switchView('entry');
+                    }
+                    // Make sure the join section is visible
+                    document.getElementById('entry-main-actions').classList.add('hidden');
+                    document.getElementById('entry-join-section').classList.remove('hidden');
+
+                    // If we are on the entry screen, re-enable the join button so they can cancel
+                    if (document.getElementById('entry-screen').classList.contains('active')) {
+                        if (btnJoin) {
+                            btnJoin.disabled = false;
+                            btnJoin.textContent = 'Cancel Join';
+                            btnJoin.classList.remove('secondary');
+                            btnJoin.classList.add('outline', 'danger');
+                            btnJoin.onclick = () => {
+                                window.history.pushState({}, '', window.location.pathname);
+                                window.location.reload();
+                            };
+                        }
+                    }
+
                     setTimeout(() => {
                         isReconnecting = false;
-                        connectToHost(ip, name);
+                        connectToHost(name, targetPeerId, displayId);
                     }, 3000);
                 }
             } else {
                 updatePlayerStatus('disconnected', 'Disconnected');
-                btnJoin.disabled = false;
-                btnJoin.textContent = 'Join Session';
+                if (btnJoin) {
+                    btnJoin.disabled = false;
+                    btnJoin.textContent = 'Join Session';
+                    btnJoin.classList.remove('outline', 'danger');
+                    btnJoin.classList.add('secondary');
+                    // restore normal onclick
+                    btnJoin.onclick = null;
+                }
                 showToast('Connection Error: ' + err.message, 'error');
             }
         });
     }
 
-    function establishConnection(ip, name) {
-        const hostPeerId = getPeerIdFromIP(ip);
-        hostConn = peer.connect(hostPeerId, { reliable: true });
+    function establishConnection(name, targetPeerId, displayId) {
+        hostConn = peer.connect(targetPeerId, { reliable: true });
 
         hostConn.on('open', () => {
             isReconnecting = false;
+            retryAttempts = 0; // Reset consecutive failures
             updatePlayerStatus('connected', 'Connected');
             playerDisplayName.textContent = name;
-            playerRoomBadge.textContent = 'Host: ' + ip;
+            playerRoomBadge.textContent = 'Session: ' + displayId;
+
+            // Update browser URL
+            window.history.pushState({}, '', '?session=' + displayId);
+
             switchView('player');
 
             // Send join message to host
@@ -606,7 +841,7 @@ btnJoin.addEventListener('click', () => {
                         peer = null;
                         setTimeout(() => {
                             isReconnecting = false;
-                            connectToHost(ip, name);
+                            connectToHost(name, targetPeerId, displayId);
                         }, 1000);
                     }
                 }
@@ -631,8 +866,19 @@ btnJoin.addEventListener('click', () => {
                 btnBuzzer.disabled = false;
                 btnBuzzer.textContent = 'BUZZ';
             } else if (data.type === 'session_ended') {
+                intentionalDisconnect = true;
                 showToast('Session was ended by the host.', 'warning');
                 if (peer && !peer.destroyed) { peer.destroy(); }
+                setTimeout(() => {
+                    window.history.pushState({}, '', window.location.pathname); // clear session param
+                    window.location.reload();
+                }, 3000);
+            } else if (data.type === 'kicked') {
+                intentionalDisconnect = true;
+                showToast('You have been kicked by the host.', 'danger');
+                if (peer && !peer.destroyed) { peer.destroy(); }
+                // Clear the session from the URL so it doesn't auto-rejoin
+                window.history.pushState({}, '', window.location.pathname);
                 setTimeout(() => window.location.reload(), 3000);
             } else if (data.type === 'start_countdown') {
                 startGlobalTimer(data.duration, 'Countdown');
@@ -651,7 +897,7 @@ btnJoin.addEventListener('click', () => {
 
         hostConn.on('close', () => {
             // If the host connection drops unexpectedly, try to reconnect
-            if (!isReconnecting) {
+            if (!isReconnecting && !intentionalDisconnect) {
                 isReconnecting = true;
                 updatePlayerStatus('reconnecting', 'Reconnecting...');
                 showToast('Connection dropped. Reconnecting...', 'warning');
@@ -659,7 +905,7 @@ btnJoin.addEventListener('click', () => {
                 peer = null;
                 setTimeout(() => {
                     isReconnecting = false;
-                    connectToHost(ip, name);
+                    connectToHost(name, targetPeerId, displayId);
                 }, 3000);
             }
         });
@@ -670,8 +916,8 @@ btnJoin.addEventListener('click', () => {
         });
     }
 
-    connectToHost(ip, name);
-});
+    connectToHost(name, targetPeerId, displayId);
+}
 
 btnBuzzer.addEventListener('click', () => {
     if (btnBuzzer.disabled || isBuzzerLocked) return;
@@ -687,6 +933,44 @@ btnBuzzer.addEventListener('click', () => {
     hostConn.send({ type: 'buzz' });
 });
 
+if (btnEditName) {
+    btnEditName.addEventListener('click', (e) => {
+        e.stopPropagation(); // prevent global click from stealing focus immediately
+        let currentName = localStorage.getItem('buzzer_name') || playerDisplayName.textContent;
+        renameInput.value = currentName;
+        renameModal.classList.remove('hidden');
+        renameInput.focus();
+    });
+
+    btnRenameCancel.addEventListener('click', () => {
+        renameModal.classList.add('hidden');
+    });
+
+    btnRenameSave.addEventListener('click', () => {
+        let newName = renameInput.value.trim();
+        let currentName = localStorage.getItem('buzzer_name') || playerDisplayName.textContent;
+
+        if (newName && newName !== "" && newName !== currentName) {
+            playerDisplayName.textContent = newName;
+            localStorage.setItem('buzzer_name', newName);
+
+            if (hostConn && hostConn.open) {
+                hostConn.send({ type: 'update_name', newName: newName });
+            }
+
+            showToast('Name updated to ' + newName, 'success');
+        }
+        renameModal.classList.add('hidden');
+    });
+
+    // allow enter key to save
+    renameInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+            btnRenameSave.click();
+        }
+    });
+}
+
 let playerConfirmLeave = false;
 btnPlayerLeave.addEventListener('click', () => {
     if (!playerConfirmLeave) {
@@ -700,6 +984,7 @@ btnPlayerLeave.addEventListener('click', () => {
         hostConn.send({ type: 'leave' });
     }
     peer.destroy();
+    window.history.pushState({}, '', window.location.pathname);
     window.location.reload();
 });
 
