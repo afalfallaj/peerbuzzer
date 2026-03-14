@@ -71,6 +71,7 @@ let currentRound = []; // { name, timeOffset }
 let firstBuzzTime = null;
 let isBuzzerLocked = false;
 let activeTimerInterval = null;
+let reconnectTimeout = null;
 
 // Audio Context setup
 const AudioContext = window.AudioContext || window.webkitAudioContext;
@@ -216,8 +217,8 @@ function init() {
             entryJoinSection.classList.remove('hidden');
             joinSessionInput.value = sessionParam.toUpperCase();
             joinSessionInput.classList.add('hidden');
-            // Also hide the back button since they came from a link
-            btnsBackMain.forEach(btn => btn.classList.add('hidden'));
+            // Keep back button visible so user can escape
+            btnsBackMain.forEach(btn => btn.classList.remove('hidden'));
             if (playerNameInput) playerNameInput.focus();
         }
     }
@@ -283,6 +284,11 @@ if (btnShowJoin) {
 btnsBackMain.forEach(btn => {
     btn.addEventListener('click', () => {
         // Stop any in-progress peer connection attempt
+        if (reconnectTimeout) {
+            clearTimeout(reconnectTimeout);
+            reconnectTimeout = null;
+        }
+
         if (hostConn) {
             try { hostConn.close(); } catch (e) {}
             hostConn = null;
@@ -296,6 +302,8 @@ btnsBackMain.forEach(btn => {
         if (btnJoin) {
             btnJoin.disabled = false;
             btnJoin.textContent = 'Join Session';
+            btnJoin.classList.remove('outline', 'danger');
+            btnJoin.classList.add('neon-green');
             btnJoin.onclick = null;
         }
 
@@ -780,8 +788,10 @@ function startPlayerConnection(name, targetPeerId, displayId) {
                         }
                     }
 
-                    setTimeout(() => {
+                    if (reconnectTimeout) clearTimeout(reconnectTimeout);
+                    reconnectTimeout = setTimeout(() => {
                         isReconnecting = false;
+                        reconnectTimeout = null;
                         connectToHost(name, targetPeerId, displayId);
                     }, 3000);
                 }
@@ -903,8 +913,10 @@ function startPlayerConnection(name, targetPeerId, displayId) {
                 showToast('Connection dropped. Reconnecting...', 'warning');
                 if (peer && !peer.destroyed) { peer.destroy(); }
                 peer = null;
-                setTimeout(() => {
+                if (reconnectTimeout) clearTimeout(reconnectTimeout);
+                reconnectTimeout = setTimeout(() => {
                     isReconnecting = false;
+                    reconnectTimeout = null;
                     connectToHost(name, targetPeerId, displayId);
                 }, 3000);
             }
@@ -978,6 +990,11 @@ btnPlayerLeave.addEventListener('click', () => {
         btnPlayerLeave.textContent = 'Click again to leave';
         setTimeout(() => { playerConfirmLeave = false; btnPlayerLeave.textContent = 'Leave Session'; }, 3000);
         return;
+    }
+
+    if (reconnectTimeout) {
+        clearTimeout(reconnectTimeout);
+        reconnectTimeout = null;
     }
 
     if (hostConn && hostConn.open) {
